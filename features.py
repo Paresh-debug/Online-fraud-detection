@@ -1,7 +1,4 @@
-"""
-Feature engineering for fraud detection
-Keeps everything numeric & model-friendly
-"""
+
 
 def extract_features(txn: dict) -> dict:
     """
