@@ -1,0 +1,40 @@
+{
+  "users": [
+    {
+      "user_id": "user_101",
+      "profile": {
+        "account_type": "student",
+        "avg_amount": 1200
+      },
+      "history": [
+        {
+          "amount": 300,
+          "device_id": "mobile_1",
+          "location": "Pune",
+          "timestamp": "2026-02-01T10:00:00"
+        },
+        {
+          "amount": 450,
+          "device_id": "mobile_1",
+          "location": "Pune",
+          "timestamp": "2026-02-01T12:00:00"
+        }
+      ]
+    },
+    {
+      "user_id": "user_202",
+      "profile": {
+        "account_type": "salary",
+        "avg_amount": 15000
+      },
+      "history": [
+        {
+          "amount": 12000,
+          "device_id": "laptop_9",
+          "location": "Mumbai",
+          "timestamp": "2026-02-01T09:30:00"
+        }
+      ]
+    }
+  ]
+}
