@@ -18,6 +18,12 @@
           "device_id": "mobile_1",
           "location": "Pune",
           "timestamp": "2026-02-01T12:00:00"
+        },
+        {
+          "amount": 180,
+          "device_id": "mobile_2",
+          "location": "Pune",
+          "timestamp": "2026-02-02T09:15:00"
         }
       ]
     },
@@ -33,6 +39,144 @@
           "device_id": "laptop_9",
           "location": "Mumbai",
           "timestamp": "2026-02-01T09:30:00"
+        },
+        {
+          "amount": 14500,
+          "device_id": "laptop_9",
+          "location": "Mumbai",
+          "timestamp": "2026-02-03T18:45:00"
+        }
+      ]
+    },
+    {
+      "user_id": "user_303",
+      "profile": {
+        "account_type": "student",
+        "avg_amount": 800
+      },
+      "history": [
+        {
+          "amount": 200,
+          "device_id": "mobile_4",
+          "location": "Nagpur",
+          "timestamp": "2026-02-01T08:10:00"
+        },
+        {
+          "amount": 950,
+          "device_id": "mobile_4",
+          "location": "Nagpur",
+          "timestamp": "2026-02-02T20:40:00"
+        }
+      ]
+    },
+    {
+      "user_id": "user_404",
+      "profile": {
+        "account_type": "business",
+        "avg_amount": 50000
+      },
+      "history": [
+        {
+          "amount": 48000,
+          "device_id": "desktop_3",
+          "location": "Delhi",
+          "timestamp": "2026-02-01T11:00:00"
+        },
+        {
+          "amount": 52000,
+          "device_id": "desktop_3",
+          "location": "Delhi",
+          "timestamp": "2026-02-02T14:30:00"
+        },
+        {
+          "amount": 150000,
+          "device_id": "laptop_11",
+          "location": "Noida",
+          "timestamp": "2026-02-03T21:10:00"
+        }
+      ]
+    },
+    {
+      "user_id": "user_505",
+      "profile": {
+        "account_type": "salary",
+        "avg_amount": 22000
+      },
+      "history": [
+        {
+          "amount": 21000,
+          "device_id": "mobile_8",
+          "location": "Bengaluru",
+          "timestamp": "2026-02-01T09:00:00"
+        },
+        {
+          "amount": 23000,
+          "device_id": "mobile_8",
+          "location": "Bengaluru",
+          "timestamp": "2026-02-02T09:05:00"
+        }
+      ]
+    },
+    {
+      "user_id": "user_606",
+      "profile": {
+        "account_type": "freelancer",
+        "avg_amount": 7000
+      },
+      "history": [
+        {
+          "amount": 6500,
+          "device_id": "tablet_2",
+          "location": "Hyderabad",
+          "timestamp": "2026-02-01T16:20:00"
+        },
+        {
+          "amount": 7200,
+          "device_id": "tablet_2",
+          "location": "Hyderabad",
+          "timestamp": "2026-02-03T10:00:00"
+        }
+      ]
+    },
+    {
+      "user_id": "user_707",
+      "profile": {
+        "account_type": "student",
+        "avg_amount": 1000
+      },
+      "history": [
+        {
+          "amount": 1100,
+          "device_id": "mobile_12",
+          "location": "Chennai",
+          "timestamp": "2026-02-01T13:50:00"
+        },
+        {
+          "amount": 2500,
+          "device_id": "mobile_12",
+          "location": "Chennai",
+          "timestamp": "2026-02-01T14:10:00"
+        }
+      ]
+    },
+    {
+      "user_id": "user_808",
+      "profile": {
+        "account_type": "business",
+        "avg_amount": 90000
+      },
+      "history": [
+        {
+          "amount": 87000,
+          "device_id": "laptop_20",
+          "location": "Ahmedabad",
+          "timestamp": "2026-02-02T17:00:00"
+        },
+        {
+          "amount": 91000,
+          "device_id": "laptop_20",
+          "location": "Ahmedabad",
+          "timestamp": "2026-02-03T19:45:00"
         }
       ]
     }
