@@ -4,3 +4,4 @@ river
 numpy
 pandas
 scikit-learn
+python-multipart
