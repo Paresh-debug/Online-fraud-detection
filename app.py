@@ -3,22 +3,6 @@ import json
 import numpy as np
 from fastapi.responses import HTMLResponse
 from fastapi import Form
-from model.online_model import model
-from model.feature_engineering import extract_features
-
-app = FastAPI(title="Adaptive Fraud Detection API")
-
-@app.post("/predict")
-def predict(transaction: dict):
-    features = extract_features(transaction)
-    fraud_prob = model.predict_proba_one(features).get(True, 0.0)
-
-    decision = "BLOCK" if fraud_prob > 0.7 else "ALLOW"
-
-    return {
-        "fraud_probability": round(fraud_prob, 4),
-        "decision": decision
-    }
 
 
 from features import extract_features
