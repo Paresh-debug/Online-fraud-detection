@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import json
 
 BACKEND_URL = "https://online-fraud-detection-jl8h.onrender.com"
 
@@ -8,6 +9,19 @@ st.set_page_config(
     page_title="XYZ Bank – Fraud Detection",
     layout="wide"
 )
+
+# -----------------------------
+# Load Users from JSON  ✅ NEW
+# -----------------------------
+@st.cache_data
+def load_users():
+    with open("user_transactions.json", "r") as f:
+        data = json.load(f)
+
+    return sorted(user["user_id"] for user in data["users"])
+
+
+users = load_users()
 
 # -----------------------------
 # Session State
@@ -21,18 +35,13 @@ if "role" not in st.session_state:
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# -----------------------------
-# Users
-# -----------------------------
-users = ["user_101", "rahul_1998", "anita_k", "rohit_s"]
-
 # ======================================================
 # PAGE 0 – ROLE SELECTION
 # ======================================================
 if st.session_state.page == "role":
     st.title("XYZ Bank")
-
     st.markdown("#### Access Role")
+
     role = st.radio("Select role", ["Customer", "Admin"])
 
     if st.button("Continue", key="role_continue"):
@@ -70,7 +79,6 @@ elif st.session_state.page == "dashboard":
     st.caption(f"Account: {user}")
 
     st.divider()
-
     left, right = st.columns([2.5, 1.5])
 
     # -----------------------------
@@ -86,10 +94,6 @@ elif st.session_state.page == "dashboard":
             if history:
                 df = pd.DataFrame(history)
                 st.dataframe(df, use_container_width=True)
-
-                if "fraud" in df.columns:
-                    st.subheader("Fraud Trend")
-                    st.line_chart(df["fraud"])
             else:
                 st.info("No transactions available")
 
@@ -149,8 +153,21 @@ elif st.session_state.page == "dashboard":
                     st.markdown("**Transaction Details**")
                     st.write("User:", txn["user_id"])
                     st.write("Amount:", txn["amount"])
-                    st.write("Risk Score:", txn["risk_score"])
                     st.write("Risk Flag:", txn["risk_flag"])
+
+                    # 🔥 MODEL PROBABILITIES (NEW)
+                    st.divider()
+                    st.markdown("**Model Risk Scores**")
+
+                    st.metric(
+                        "Random Forest Probability",
+                        f"{txn['rf_probability']:.2f}"
+                    )
+
+                    st.metric(
+                        "Online Model Probability",
+                        f"{txn['online_probability']:.2f}"
+                    )
 
                     col1, col2 = st.columns(2)
 
