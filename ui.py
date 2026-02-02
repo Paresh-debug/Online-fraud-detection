@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 
-BACKEND_URL = "https://github.com/Paresh-debug/Online-fraud-detection/blob/main/app.py"
+BACKEND_URL = "https://online-fraud-detection-jl8h.onrender.com"
 
 st.set_page_config(
     page_title="XYZ Bank – Fraud Detection",
