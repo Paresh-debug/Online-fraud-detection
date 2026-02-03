@@ -14,12 +14,16 @@ st.set_page_config(
 )
 
 # --------------------------------------------------
-# Custom CSS – Bright Gradient Theme
+# Custom CSS – Soft Mesh Background (Premium)
 # --------------------------------------------------
 st.markdown("""
 <style>
 body {
-    background: linear-gradient(135deg, #e0f2fe, #ede9fe);
+    background:
+        radial-gradient(circle at 20% 20%, #e9f0ff 0%, transparent 40%),
+        radial-gradient(circle at 80% 0%, #f3e8ff 0%, transparent 35%),
+        radial-gradient(circle at 50% 80%, #ecfeff 0%, transparent 40%),
+        #f8fafc;
 }
 
 .block-container {
@@ -36,11 +40,10 @@ h1, h2, h3 {
 }
 
 .card {
-    background: rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95);
     padding: 1.4rem;
     border-radius: 16px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+    box-shadow: 0 12px 28px rgba(0,0,0,0.08);
     margin-bottom: 1.2rem;
 }
 
@@ -61,33 +64,18 @@ h1, h2, h3 {
 }
 
 .stButton>button:hover {
-    opacity: 0.9;
+    opacity: 0.92;
 }
 
-.risk-low {
-    color: #16a34a;
-    font-weight: 600;
-}
-
-.risk-medium {
-    color: #ca8a04;
-    font-weight: 600;
-}
-
-.risk-high {
-    color: #ea580c;
-    font-weight: 600;
-}
-
-.risk-severe {
-    color: #dc2626;
-    font-weight: 700;
-}
+.risk-low { color: #16a34a; font-weight: 600; }
+.risk-medium { color: #ca8a04; font-weight: 600; }
+.risk-high { color: #ea580c; font-weight: 600; }
+.risk-severe { color: #dc2626; font-weight: 700; }
 </style>
 """, unsafe_allow_html=True)
 
 # --------------------------------------------------
-# Load users
+# Load users from JSON
 # --------------------------------------------------
 @st.cache_data
 def load_users():
@@ -114,7 +102,7 @@ if "user" not in st.session_state:
 if st.session_state.page == "role":
     st.markdown("<h1 style='text-align:center'>XYZ Bank</h1>", unsafe_allow_html=True)
     st.markdown(
-        "<p class='subtitle' style='text-align:center'>Adaptive Online Fraud Detection System</p>",
+        "<p class='subtitle' style='text-align:center'>Adaptive Online Fraud Detection Platform</p>",
         unsafe_allow_html=True
     )
 
@@ -155,7 +143,7 @@ elif st.session_state.page == "dashboard":
     role = st.session_state.role
 
     st.markdown(f"<h2>{role} Dashboard</h2>", unsafe_allow_html=True)
-    st.markdown(f"<p class='subtitle'>Account: {user}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p class='subtitle'>Account ID: {user}</p>", unsafe_allow_html=True)
 
     left, right = st.columns([2.6, 1.4])
 
@@ -173,14 +161,15 @@ elif st.session_state.page == "dashboard":
             df = pd.DataFrame(history)
             st.dataframe(df, use_container_width=True)
 
-            st.markdown("<div class='section-title'>Amount Trend</div>", unsafe_allow_html=True)
-            st.line_chart(df["amount"])
+            if "amount" in df.columns:
+                st.markdown("<div class='section-title'>Amount Trend</div>", unsafe_allow_html=True)
+                st.line_chart(df["amount"])
 
             if "fraud" in df.columns:
                 st.markdown("<div class='section-title'>Fraud Decisions</div>", unsafe_allow_html=True)
                 st.line_chart(df["fraud"])
         else:
-            st.info("No transactions available")
+            st.info("No transaction history available")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
