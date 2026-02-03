@@ -5,21 +5,21 @@ import json
 
 BACKEND_URL = "https://online-fraud-detection-jl8h.onrender.com"
 
-# -----------------------------
+# --------------------------------------------------
 # Page config
-# -----------------------------
+# --------------------------------------------------
 st.set_page_config(
     page_title="XYZ Bank | Fraud Detection",
     layout="wide"
 )
 
-# -----------------------------
-# Custom CSS (beautification)
-# -----------------------------
+# --------------------------------------------------
+# Custom CSS – Bright Gradient Theme
+# --------------------------------------------------
 st.markdown("""
 <style>
 body {
-    background-color: #f5f7fb;
+    background: linear-gradient(135deg, #e0f2fe, #ede9fe);
 }
 
 .block-container {
@@ -27,51 +27,68 @@ body {
 }
 
 h1, h2, h3 {
-    color: #1f2a44;
+    color: #1e293b;
+}
+
+.subtitle {
+    color: #475569;
+    font-size: 0.95rem;
 }
 
 .card {
-    background-color: white;
-    padding: 1.2rem;
-    border-radius: 12px;
-    box-shadow: 0px 4px 14px rgba(0,0,0,0.06);
-    margin-bottom: 1rem;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(10px);
+    padding: 1.4rem;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+    margin-bottom: 1.2rem;
 }
 
 .section-title {
     font-size: 1.1rem;
     font-weight: 600;
-    color: #1f2a44;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.6rem;
+    color: #0f172a;
 }
 
 .stButton>button {
-    width: 100%;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 0.6rem;
+    font-weight: 600;
+    background: linear-gradient(90deg, #6366f1, #3b82f6);
+    color: white;
+    border: none;
+}
+
+.stButton>button:hover {
+    opacity: 0.9;
+}
+
+.risk-low {
+    color: #16a34a;
     font-weight: 600;
 }
 
-.approve button {
-    background-color: #2e7d32;
-    color: white;
+.risk-medium {
+    color: #ca8a04;
+    font-weight: 600;
 }
 
-.reject button {
-    background-color: #c62828;
-    color: white;
+.risk-high {
+    color: #ea580c;
+    font-weight: 600;
 }
 
-.small-text {
-    font-size: 0.85rem;
-    color: #6b7280;
+.risk-severe {
+    color: #dc2626;
+    font-weight: 700;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# -----------------------------
+# --------------------------------------------------
 # Load users
-# -----------------------------
+# --------------------------------------------------
 @st.cache_data
 def load_users():
     with open("user_transactions.json") as f:
@@ -81,9 +98,9 @@ def load_users():
 
 users = load_users()
 
-# -----------------------------
+# --------------------------------------------------
 # Session state
-# -----------------------------
+# --------------------------------------------------
 if "page" not in st.session_state:
     st.session_state.page = "role"
 if "role" not in st.session_state:
@@ -91,26 +108,27 @@ if "role" not in st.session_state:
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# ======================================================
+# ==================================================
 # ROLE SELECTION
-# ======================================================
+# ==================================================
 if st.session_state.page == "role":
     st.markdown("<h1 style='text-align:center'>XYZ Bank</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center;color:#6b7280'>Fraud Detection Platform</p>", unsafe_allow_html=True)
+    st.markdown(
+        "<p class='subtitle' style='text-align:center'>Adaptive Online Fraud Detection System</p>",
+        unsafe_allow_html=True
+    )
 
     st.write("")
-    st.write("")
-
-    role = st.radio("Select Access Role", ["Customer", "Admin"], horizontal=True)
+    role = st.radio("Select Role", ["Customer", "Admin"], horizontal=True)
 
     if st.button("Continue"):
         st.session_state.role = role
         st.session_state.page = "user"
         st.rerun()
 
-# ======================================================
+# ==================================================
 # USER SELECTION
-# ======================================================
+# ==================================================
 elif st.session_state.page == "user":
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.markdown("<div class='section-title'>Account Selection</div>", unsafe_allow_html=True)
@@ -118,7 +136,6 @@ elif st.session_state.page == "user":
     user = st.selectbox("User ID", users)
 
     col1, col2 = st.columns(2)
-
     if col1.button("Proceed"):
         st.session_state.user = user
         st.session_state.page = "dashboard"
@@ -130,23 +147,21 @@ elif st.session_state.page == "user":
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ======================================================
+# ==================================================
 # DASHBOARD
-# ======================================================
+# ==================================================
 elif st.session_state.page == "dashboard":
     user = st.session_state.user
     role = st.session_state.role
 
     st.markdown(f"<h2>{role} Dashboard</h2>", unsafe_allow_html=True)
-    st.markdown(f"<p class='small-text'>Account ID: {user}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p class='subtitle'>Account: {user}</p>", unsafe_allow_html=True)
 
-    st.write("")
+    left, right = st.columns([2.6, 1.4])
 
-    left, right = st.columns([2.7, 1.3])
-
-    # -----------------------------
+    # --------------------------------------------------
     # LEFT – HISTORY + GRAPHS
-    # -----------------------------
+    # --------------------------------------------------
     with left:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
         st.markdown("<div class='section-title'>Transaction History</div>", unsafe_allow_html=True)
@@ -158,25 +173,26 @@ elif st.session_state.page == "dashboard":
             df = pd.DataFrame(history)
             st.dataframe(df, use_container_width=True)
 
-            if "amount" in df.columns:
-                st.markdown("<div class='section-title'>Amount Trend</div>", unsafe_allow_html=True)
-                st.line_chart(df["amount"])
+            st.markdown("<div class='section-title'>Amount Trend</div>", unsafe_allow_html=True)
+            st.line_chart(df["amount"])
 
             if "fraud" in df.columns:
                 st.markdown("<div class='section-title'>Fraud Decisions</div>", unsafe_allow_html=True)
                 st.line_chart(df["fraud"])
         else:
-            st.info("No transaction history available")
+            st.info("No transactions available")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # -----------------------------
+    # --------------------------------------------------
     # RIGHT – ACTION PANEL
-    # -----------------------------
+    # --------------------------------------------------
     with right:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
 
+        # ---------------------------
         # CUSTOMER
+        # ---------------------------
         if role == "Customer":
             st.markdown("<div class='section-title'>New Transaction</div>", unsafe_allow_html=True)
 
@@ -194,7 +210,9 @@ elif st.session_state.page == "dashboard":
                 )
                 st.success("Transaction submitted for evaluation")
 
+        # ---------------------------
         # ADMIN
+        # ---------------------------
         else:
             st.markdown("<div class='section-title'>Pending Transactions</div>", unsafe_allow_html=True)
 
@@ -205,18 +223,26 @@ elif st.session_state.page == "dashboard":
                 df = pd.DataFrame(pending)
                 st.dataframe(df, use_container_width=True)
 
-                txn_id = st.selectbox("Select Transaction", df["transaction_id"])
+                txn_id = st.selectbox("Transaction ID", df["transaction_id"])
                 txn = df[df["transaction_id"] == txn_id].iloc[0]
 
-                st.markdown("<hr>", unsafe_allow_html=True)
-                st.write("Risk Score:", txn["risk_score"])
-                st.write("Risk Flag:", txn["risk_flag"])
-                st.write("RF Probability:", txn["rf_probability"])
-                st.write("Online Probability:", txn["online_probability"])
+                flag = txn["risk_flag"]
+                flag_class = (
+                    "risk-low" if flag == "LOW" else
+                    "risk-medium" if flag == "MEDIUM" else
+                    "risk-high" if flag in ["HIGH", "CRITICAL"] else
+                    "risk-severe"
+                )
+
+                st.markdown(f"""
+                <p><strong>Risk Score:</strong> {txn["risk_score"]}</p>
+                <p><strong>Risk Flag:</strong> <span class="{flag_class}">{flag}</span></p>
+                <p><strong>RF Probability:</strong> {txn["rf_probability"]}</p>
+                <p><strong>Online Probability:</strong> {txn["online_probability"]}</p>
+                """, unsafe_allow_html=True)
 
                 with st.form("decision_form"):
                     col1, col2 = st.columns(2)
-
                     approve = col1.form_submit_button("Approve")
                     reject = col2.form_submit_button("Reject")
 
@@ -229,14 +255,13 @@ elif st.session_state.page == "dashboard":
                                 "decision": "APPROVE" if approve else "REJECT"
                             }
                         )
-                        st.success("Decision saved")
+                        st.success("Decision recorded")
                         st.rerun()
             else:
-                st.info("No pending requests")
+                st.info("No pending transactions")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    st.write("")
     if st.button("Back"):
         st.session_state.page = "user"
         st.rerun()
