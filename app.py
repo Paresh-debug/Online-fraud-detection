@@ -12,7 +12,7 @@ app = FastAPI(title="Fully Automatic Fraud Detection")
 DATA_FILE = "user_transactions.json"
 
 # -----------------------------
-# Load / Save
+# Load / Save helpers
 # -----------------------------
 def load_data():
     with open(DATA_FILE) as f:
@@ -68,7 +68,7 @@ def evaluate_transaction(txn: dict):
     }
 
     # -----------------------------
-    # Features
+    # Feature extraction
     # -----------------------------
     features = extract_features(transaction, user)
 
@@ -110,12 +110,12 @@ def evaluate_transaction(txn: dict):
     risk_flag = get_risk_flag(risk_score)
 
     # -----------------------------
-    # OTP logic (ONLY < 50)
+    # 🔐 OTP logic (NOW > 50)
     # -----------------------------
     otp = None
     otp_verified = False
 
-    if risk_score < 50:
+    if risk_score > 50:
         otp = random.randint(100000, 999999)
 
     txn_id = f"{user_id}_{len(user['pending'])}"
@@ -171,6 +171,7 @@ def transaction_decision(
     user = users[user_id]
     txn = user["pending"][transaction_id]
 
+    # ❌ Block approval if OTP required but not verified
     if txn["otp"] and not txn["otp_verified"]:
         return {"error": "OTP not verified"}
 
@@ -195,7 +196,7 @@ def transaction_decision(
     return {"saved": True}
 
 # -----------------------------
-# PENDING (Admin)
+# PENDING + HISTORY
 # -----------------------------
 @app.get("/pending")
 def pending():
@@ -215,9 +216,6 @@ def pending():
             })
     return out
 
-# -----------------------------
-# HISTORY
-# -----------------------------
 @app.get("/history/{user_id}")
 def history(user_id: str):
     return users[user_id].get("history", [])
