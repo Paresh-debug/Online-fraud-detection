@@ -57,10 +57,15 @@ def evaluate_transaction(txn: dict):
     features = extract_features(transaction, user)
 
     X_rf = np.array([[features[k] for k in [
-        "amount","txn_velocity","device_change",
-        "location_change","amount_ratio",
-        "account_amount_flag","rapid_txn"
-    ]]])
+    "amount",
+    "txn_velocity",
+    "device_change",
+    "location_change",
+    "amount_ratio",
+    "account_amount_flag",  # ← NEW FEATURE USED HERE
+    "rapid_txn"
+]]])
+
 
     rf_prob = float(rf_model.predict_proba(X_rf)[0][1])
 
@@ -71,6 +76,10 @@ def evaluate_transaction(txn: dict):
     )
 
     risk_score = (0.6 * online_prob + 0.4 * rf_prob) * 100
+    # Rule-based risk boost for account type
+    if features["account_amount_flag"] == 1:
+        risk_score += 15
+
 
     # Rule-based boosts
     avg = user["profile"]["avg_amount"]
