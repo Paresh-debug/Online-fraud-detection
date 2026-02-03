@@ -1,125 +1,121 @@
 from fastapi import FastAPI, Form
-import json
+import json, random
 import numpy as np
-import random
 from datetime import datetime
 
 from features import extract_features
 from model import rf_model, online_model
 
-app = FastAPI(title="Fully Automatic Fraud Detection")
+app = FastAPI(title="Risk-Aware Fraud Detection")
 
 DATA_FILE = "user_transactions.json"
 
-# -----------------------------
-# Load / Save helpers
-# -----------------------------
+# -----------------------
+# Load / Save
+# -----------------------
 def load_data():
     with open(DATA_FILE) as f:
         return json.load(f)
 
-def save_data(data):
+def save_data(d):
     with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+        json.dump(d, f, indent=2)
 
 data = load_data()
 users = {u["user_id"]: u for u in data["users"]}
 
-# -----------------------------
-# Risk flag
-# -----------------------------
-def get_risk_flag(score: float) -> str:
-    if score <= 20:
-        return "LOW"
-    elif score <= 40:
-        return "MEDIUM"
-    elif score <= 60:
-        return "HIGH"
-    elif score <= 80:
-        return "CRITICAL"
-    else:
-        return "SEVERE"
+# -----------------------
+# Risk Flag
+# -----------------------
+def get_risk_flag(score):
+    if score <= 20: return "LOW"
+    if score <= 40: return "MEDIUM"
+    if score <= 60: return "HIGH"
+    if score <= 80: return "CRITICAL"
+    return "SEVERE"
 
-# -----------------------------
-# TRANSACTION (Customer)
-# -----------------------------
+# -----------------------
+# Transaction
+# -----------------------
 @app.post("/transaction")
 def evaluate_transaction(txn: dict):
 
-    user_id = txn.get("user_id")
-    amount = txn.get("amount")
-    device_id = txn.get("device_id")
-
-    if not user_id or amount is None or not device_id:
-        return {"error": "Invalid input"}
-
-    user = users[user_id]
+    user = users[txn["user_id"]]
     user.setdefault("history", [])
     user.setdefault("pending", {})
-    user.setdefault("profile", {"avg_amount": amount})
-
-    location = user["history"][-1]["location"] if user["history"] else "INDIA"
+    user.setdefault("profile", {"avg_amount": txn["amount"]})
 
     transaction = {
-        "amount": amount,
-        "device_id": device_id,
-        "location": location,
+        "amount": txn["amount"],
+        "device_id": txn["device_id"],
+        "location": "INDIA",
         "timestamp": datetime.utcnow().isoformat()
     }
 
-    # -----------------------------
-    # Feature extraction
-    # -----------------------------
     features = extract_features(transaction, user)
 
-    X_rf = np.array([[ 
-        features["amount"],
-        features["txn_velocity"],
-        features["device_change"],
-        features["location_change"],
-        features["amount_ratio"],
-        features["account_amount_flag"],
-        features["rapid_txn"]
-    ]])
+    X_rf = np.array([[features[k] for k in [
+        "amount","txn_velocity","device_change",
+        "location_change","amount_ratio",
+        "account_amount_flag","rapid_txn"
+    ]]])
 
     rf_prob = float(rf_model.predict_proba(X_rf)[0][1])
-
-    numeric_features = {
-        k: v for k, v in features.items()
-        if not k.startswith("_")
-    }
-
     online_prob = float(
-        online_model.predict_proba_one(numeric_features).get(1, 0)
+        online_model.predict_proba_one(
+            {k:v for k,v in features.items() if not k.startswith("_")}
+        ).get(1, 0)
     )
 
-    # -----------------------------
-    # Risk score
-    # -----------------------------
     risk_score = (0.6 * online_prob + 0.4 * rf_prob) * 100
 
-    avg_amount = user["profile"]["avg_amount"]
-    if amount > avg_amount * 3:
-        risk_score += 10
-    if amount % 10 != 0:
-        risk_score += 5
-    if user["history"] and user["history"][-1]["location"] != location:
-        risk_score += 10
+    # rule boosts
+    avg = user["profile"]["avg_amount"]
+    if txn["amount"] > avg * 3: risk_score += 10
+    if txn["amount"] % 10 != 0: risk_score += 5
 
     risk_score = round(min(risk_score, 100), 2)
     risk_flag = get_risk_flag(risk_score)
 
-    # -----------------------------
-    # 🔐 OTP logic (NOW > 50)
-    # -----------------------------
+    txn_id = f"{txn['user_id']}_{len(user['history'])+len(user['pending'])}"
+
+    # -----------------------
+    # POLICY ACTIONS
+    # -----------------------
     otp = None
     otp_verified = False
+    auto_decision = None
 
-    if risk_score > 50:
+    if risk_flag == "LOW":
+        auto_decision = "APPROVE"
+
+    elif risk_flag == "MEDIUM":
+        auto_decision = "APPROVE_MONITOR"
+
+    elif risk_flag in ["HIGH", "CRITICAL"]:
         otp = random.randint(100000, 999999)
 
-    txn_id = f"{user_id}_{len(user['pending'])}"
+    elif risk_flag == "SEVERE":
+        auto_decision = "BLOCK"
 
+    # -----------------------
+    # Handle auto decisions
+    # -----------------------
+    if auto_decision:
+        transaction["fraud"] = 1 if auto_decision == "BLOCK" else 0
+        user["history"].append(transaction)
+        save_data(data)
+
+        return {
+            "transaction_id": txn_id,
+            "risk_score": risk_score,
+            "risk_flag": risk_flag,
+            "action": auto_decision
+        }
+
+    # -----------------------
+    # Pending (HIGH / CRITICAL)
+    # -----------------------
     user["pending"][txn_id] = {
         "transaction": transaction,
         "features": features,
@@ -128,7 +124,7 @@ def evaluate_transaction(txn: dict):
         "rf_probability": rf_prob,
         "online_probability": online_prob,
         "otp": otp,
-        "otp_verified": otp_verified
+        "otp_verified": False
     }
 
     save_data(data)
@@ -137,13 +133,13 @@ def evaluate_transaction(txn: dict):
         "transaction_id": txn_id,
         "risk_score": risk_score,
         "risk_flag": risk_flag,
-        "otp_required": otp is not None,
+        "otp_required": True,
         "otp": otp
     }
 
-# -----------------------------
-# VERIFY OTP (Admin)
-# -----------------------------
+# -----------------------
+# Verify OTP
+# -----------------------
 @app.post("/verify-otp")
 def verify_otp(
     user_id: str = Form(...),
@@ -151,19 +147,17 @@ def verify_otp(
     otp: int = Form(...)
 ):
     txn = users[user_id]["pending"][transaction_id]
-
     if txn["otp"] != otp:
         return {"verified": False}
-
     txn["otp_verified"] = True
     save_data(data)
     return {"verified": True}
 
-# -----------------------------
-# DECISION (Admin)
-# -----------------------------
+# -----------------------
+# Admin Decision
+# -----------------------
 @app.post("/decision")
-def transaction_decision(
+def decision(
     user_id: str = Form(...),
     transaction_id: str = Form(...),
     decision: str = Form(...)
@@ -171,33 +165,26 @@ def transaction_decision(
     user = users[user_id]
     txn = user["pending"][transaction_id]
 
-    # ❌ Block approval if OTP required but not verified
-    if txn["otp"] and not txn["otp_verified"]:
+    if not txn["otp_verified"]:
         return {"error": "OTP not verified"}
 
     txn = user["pending"].pop(transaction_id)
-
     label = 0 if decision == "APPROVE" else 1
 
-    numeric_features = {
-        k: v for k, v in txn["features"].items()
-        if not k.startswith("_")
-    }
-
-    online_model.learn_one(numeric_features, label)
+    online_model.learn_one(
+        {k:v for k,v in txn["features"].items() if not k.startswith("_")},
+        label
+    )
 
     txn["transaction"]["fraud"] = label
     user["history"].append(txn["transaction"])
-
-    history = user["history"]
-    user["profile"]["avg_amount"] = sum(h["amount"] for h in history) / len(history)
-
     save_data(data)
+
     return {"saved": True}
 
-# -----------------------------
-# PENDING + HISTORY
-# -----------------------------
+# -----------------------
+# Views
+# -----------------------
 @app.get("/pending")
 def pending():
     out = []
@@ -206,12 +193,10 @@ def pending():
             out.append({
                 "transaction_id": tid,
                 "user_id": uid,
-                "amount": t["transaction"]["amount"],
                 "risk_score": t["risk_score"],
                 "risk_flag": t["risk_flag"],
                 "rf_probability": t["rf_probability"],
                 "online_probability": t["online_probability"],
-                "otp_required": t["otp"] is not None,
                 "otp_verified": t["otp_verified"]
             })
     return out
