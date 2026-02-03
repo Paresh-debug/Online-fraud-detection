@@ -186,23 +186,55 @@ def decision(
     decision: str = Form(...)
 ):
     user = users[user_id]
+
+    if transaction_id not in user.get("pending", {}):
+        return {"error": "Transaction not found"}
+
     txn = user["pending"].pop(transaction_id)
 
-    if not txn["otp_verified"]:
-        return {"error": "OTP not verified"}
+    otp_verified = txn.get("otp_verified", False)
 
-    label = 0 if decision == "APPROVE" else 1
+    # -------------------------------------------------
+    # FRAUD LABEL LOGIC (STRICT)
+    # -------------------------------------------------
+    if decision == "APPROVE":
+        if not otp_verified:
+            # Approval without OTP is NOT allowed
+            return {
+                "error": "OTP verification required before approval"
+            }
+        fraud_label = 0
 
-    online_model.learn_one(
-        {k:v for k,v in txn["features"].items() if not k.startswith("_")},
-        label
-    )
+    else:  # REJECT
+        # ❗ Rejecting without OTP = FRAUD
+        fraud_label = 1
 
-    txn["transaction"]["fraud"] = label
+    # -------------------------------------------------
+    # Online model learns ONLY when OTP verified
+    # -------------------------------------------------
+    if otp_verified:
+        online_model.learn_one(
+            {k: v for k, v in txn["features"].items() if not k.startswith("_")},
+            fraud_label
+        )
+
+    # -------------------------------------------------
+    # Save transaction
+    # -------------------------------------------------
+    txn["transaction"]["fraud"] = fraud_label
+    txn["transaction"]["decision"] = decision
+    txn["transaction"]["otp_verified"] = otp_verified
+
     user["history"].append(txn["transaction"])
     save_data(data)
 
-    return {"saved": True}
+    return {
+        "transaction_id": transaction_id,
+        "decision": decision,
+        "fraud": fraud_label,
+        "otp_verified": otp_verified,
+        "saved": True
+    }
 
 # -------------------------------
 # Views
