@@ -10,9 +10,9 @@ app = FastAPI(title="Risk-Aware Fraud Detection")
 
 DATA_FILE = "user_transactions.json"
 
-# -------------------------------------------------
-# Load & Save
-# -------------------------------------------------
+# -------------------------------
+# Load / Save
+# -------------------------------
 def load_data():
     with open(DATA_FILE) as f:
         return json.load(f)
@@ -22,11 +22,11 @@ def save_data(d):
         json.dump(d, f, indent=2)
 
 data = load_data()
-users = {u["user_id"]: u for u in data.get("users", [])}
+users = {u["user_id"]: u for u in data["users"]}
 
-# -------------------------------------------------
-# Risk Levels
-# -------------------------------------------------
+# -------------------------------
+# Risk flags
+# -------------------------------
 def get_risk_flag(score):
     if score <= 20: return "LOW"
     if score <= 40: return "MEDIUM"
@@ -34,38 +34,64 @@ def get_risk_flag(score):
     if score <= 80: return "CRITICAL"
     return "SEVERE"
 
-# -------------------------------------------------
-# Transaction Evaluation
-# -------------------------------------------------
+# -------------------------------
+# Transaction endpoint
+# -------------------------------
 @app.post("/transaction")
 def evaluate_transaction(txn: dict):
 
     user_id = txn["user_id"]
-    user = users[user_id]
+    amount = txn["amount"]
+    device_id = txn["device_id"]
 
+    user = users[user_id]
     user.setdefault("history", [])
     user.setdefault("pending", {})
-    user.setdefault("profile", {"avg_amount": txn["amount"]})
+    user.setdefault("profile", {"avg_amount": amount})
 
     transaction = {
-        "amount": txn["amount"],
-        "device_id": txn["device_id"],
+        "amount": amount,
+        "device_id": device_id,
         "location": "INDIA",
         "timestamp": datetime.utcnow().isoformat()
     }
 
     features = extract_features(transaction, user)
 
-    X_rf = np.array([[features[k] for k in [
-    "amount",
-    "txn_velocity",
-    "device_change",
-    "location_change",
-    "amount_ratio",
-    "account_amount_flag",  # ← NEW FEATURE USED HERE
-    "rapid_txn"
-]]])
+    txn_id = f"{user_id}_{len(user['history']) + len(user['pending'])}"
 
+    # -------------------------------------------------
+    # HARD BLOCK: account limit exceeded
+    # -------------------------------------------------
+    if features["account_amount_flag"] == 1:
+        transaction["fraud"] = 1
+        transaction["block_reason"] = "AMOUNT_EXCEEDS_ACCOUNT_LIMIT"
+        user["history"].append(transaction)
+        save_data(data)
+
+        return {
+            "transaction_id": txn_id,
+            "risk_score": 100,
+            "risk_flag": "SEVERE",
+            "action": "BLOCK",
+            "message": (
+                f"Transaction blocked: amount exceeds limit for "
+                f"{features['_meta']['account_type']} account"
+            )
+        }
+
+    # -------------------------------------------------
+    # ML scoring
+    # -------------------------------------------------
+    X_rf = np.array([[features[k] for k in [
+        "amount",
+        "txn_velocity",
+        "device_change",
+        "location_change",
+        "amount_ratio",
+        "account_amount_flag",
+        "rapid_txn"
+    ]]])
 
     rf_prob = float(rf_model.predict_proba(X_rf)[0][1])
 
@@ -76,50 +102,42 @@ def evaluate_transaction(txn: dict):
     )
 
     risk_score = (0.6 * online_prob + 0.4 * rf_prob) * 100
-    # Rule-based risk boost for account type
-    if features["account_amount_flag"] == 1:
-        risk_score += 15
 
-
-    # Rule-based boosts
-    avg = user["profile"]["avg_amount"]
-    if txn["amount"] > avg * 3: risk_score += 10
-    if txn["amount"] % 10 != 0: risk_score += 5
-    if features["location_change"] == 1: risk_score += 10
+    # Explainable boosts
+    if amount > user["profile"]["avg_amount"] * 3:
+        risk_score += 10
+    if amount % 10 != 0:
+        risk_score += 5
+    if features["location_change"] == 1:
+        risk_score += 10
 
     risk_score = round(min(risk_score, 100), 2)
     risk_flag = get_risk_flag(risk_score)
 
-    txn_id = f"{user_id}_{len(user['history']) + len(user['pending'])}"
-
     # -------------------------------------------------
-    # Risk Policy Enforcement
+    # Risk policy
     # -------------------------------------------------
-    otp = None
-    auto_action = None
-
     if risk_flag == "LOW":
-        auto_action = "APPROVE"
-    elif risk_flag == "MEDIUM":
-        auto_action = "APPROVE_MONITOR"
-    elif risk_flag in ["HIGH", "CRITICAL"]:
-        otp = random.randint(100000, 999999)
-    elif risk_flag == "SEVERE":
-        auto_action = "BLOCK"
-
-    if auto_action:
-        transaction["fraud"] = 1 if auto_action == "BLOCK" else 0
+        transaction["fraud"] = 0
         user["history"].append(transaction)
         save_data(data)
+        return {"action": "AUTO_APPROVE"}
 
-        return {
-            "transaction_id": txn_id,
-            "risk_score": risk_score,
-            "risk_flag": risk_flag,
-            "action": auto_action
-        }
+    if risk_flag == "MEDIUM":
+        transaction["fraud"] = 0
+        user["history"].append(transaction)
+        save_data(data)
+        return {"action": "APPROVE_MONITOR"}
 
-    # Pending for admin
+    if risk_flag == "SEVERE":
+        transaction["fraud"] = 1
+        user["history"].append(transaction)
+        save_data(data)
+        return {"action": "BLOCK"}
+
+    # HIGH / CRITICAL → OTP + Admin
+    otp = random.randint(100000, 999999)
+
     user["pending"][txn_id] = {
         "transaction": transaction,
         "features": features,
@@ -141,9 +159,9 @@ def evaluate_transaction(txn: dict):
         "otp": otp
     }
 
-# -------------------------------------------------
-# OTP Verification
-# -------------------------------------------------
+# -------------------------------
+# OTP verification
+# -------------------------------
 @app.post("/verify-otp")
 def verify_otp(
     user_id: str = Form(...),
@@ -158,9 +176,9 @@ def verify_otp(
     save_data(data)
     return {"verified": True}
 
-# -------------------------------------------------
-# Admin Decision
-# -------------------------------------------------
+# -------------------------------
+# Admin decision
+# -------------------------------
 @app.post("/decision")
 def decision(
     user_id: str = Form(...),
@@ -186,9 +204,9 @@ def decision(
 
     return {"saved": True}
 
-# -------------------------------------------------
+# -------------------------------
 # Views
-# -------------------------------------------------
+# -------------------------------
 @app.get("/pending")
 def pending():
     out = []
@@ -211,4 +229,10 @@ def history(user_id: str):
 
 @app.get("/debug/users")
 def debug_users():
-    return [{"user_id": u} for u in users.keys()]
+    return [
+        {
+            "user_id": u["user_id"],
+            "account_type": u.get("profile", {}).get("account_type", "SAVINGS")
+        }
+        for u in users.values()
+    ]

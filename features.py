@@ -1,7 +1,7 @@
 from datetime import datetime
 
 # -------------------------------
-# Account type limits
+# Account limits by type
 # -------------------------------
 ACCOUNT_LIMITS = {
     "SAVINGS": 50000,
@@ -11,10 +11,11 @@ ACCOUNT_LIMITS = {
 }
 
 def extract_features(transaction, user):
-
     history = user.get("history", [])
     profile = user.get("profile", {})
+
     account_type = profile.get("account_type", "SAVINGS")
+    limit = ACCOUNT_LIMITS.get(account_type, 50000)
 
     amount = transaction["amount"]
     device_id = transaction["device_id"]
@@ -53,10 +54,9 @@ def extract_features(transaction, user):
     amount_ratio = amount / avg_amount if avg_amount > 0 else 1
 
     # -------------------------------
-    # Account type amount flag ⭐ NEW
+    # HARD LIMIT FLAG
     # -------------------------------
-    limit = ACCOUNT_LIMITS.get(account_type, 50000)
-    account_amount_flag = 1 if amount > limit else 0
+    account_amount_exceeded = 1 if amount > limit else 0
 
     return {
         "amount": amount,
@@ -65,11 +65,10 @@ def extract_features(transaction, user):
         "location_change": location_change,
         "amount_ratio": amount_ratio,
         "rapid_txn": rapid_txn,
-        "account_amount_flag": account_amount_flag,
+        "account_amount_flag": account_amount_exceeded,
 
-        # metadata (not used by models)
         "_meta": {
             "account_type": account_type,
-            "limit": limit
+            "account_limit": limit
         }
     }
