@@ -21,52 +21,55 @@ if "role" not in st.session_state:
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# -------------------------------------------------
-# Utility
-# -------------------------------------------------
-def get_users():
-    res = requests.get(f"{BACKEND_URL}/debug/users")
-    return res.json() if res.status_code == 200 else []
+if "otp_ok" not in st.session_state:
+    st.session_state.otp_ok = False
 
 # -------------------------------------------------
-# PAGE 0 – ROLE SELECTION
+# Utilities
+# -------------------------------------------------
+@st.cache_data
+def get_users():
+    res = requests.get(f"{BACKEND_URL}/debug/users")
+    if res.status_code != 200:
+        return []
+    return [u["user_id"] for u in res.json()]
+
+# -------------------------------------------------
+# PAGE 0 – ROLE
 # -------------------------------------------------
 if st.session_state.page == "role":
     st.markdown(
         """
-        <div style="background: linear-gradient(90deg,#6dd5fa,#ffffff);
-                    padding:30px;border-radius:10px;">
+        <div style="background:linear-gradient(90deg,#89f7fe,#66a6ff);
+                    padding:30px;border-radius:12px;">
         <h1 style="text-align:center;">XYZ Bank</h1>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    st.subheader("Access Role")
-    role = st.radio("Select role", ["Customer", "Admin"])
+    role = st.radio("Select Role", ["Customer", "Admin"])
 
-    if st.button("Continue", key="role_continue"):
+    if st.button("Continue"):
         st.session_state.role = role
-        st.session_state.page = "user_select"
+        st.session_state.page = "user"
         st.rerun()
 
 # -------------------------------------------------
-# PAGE 1 – USER SELECTION
+# PAGE 1 – USER SELECT
 # -------------------------------------------------
-elif st.session_state.page == "user_select":
-    st.title("Account Selection")
-
+elif st.session_state.page == "user":
     users = get_users()
     user = st.selectbox("User ID", ["-- Select --"] + users)
 
     c1, c2 = st.columns(2)
 
-    if user != "-- Select --" and c1.button("Proceed", key="user_proceed"):
+    if user != "-- Select --" and c1.button("Proceed"):
         st.session_state.user = user
         st.session_state.page = "dashboard"
         st.rerun()
 
-    if c2.button("Back", key="user_back"):
+    if c2.button("Back"):
         st.session_state.page = "role"
         st.rerun()
 
@@ -85,153 +88,112 @@ elif st.session_state.page == "dashboard":
     left, right = st.columns([2.5, 1.5])
 
     # ---------------------------------------------
-    # LEFT – TRANSACTION HISTORY
+    # HISTORY
     # ---------------------------------------------
     with left:
-        st.subheader("Transaction History")
+        res = requests.get(f"{BACKEND_URL}/history/{user}")
+        history = res.json()
 
-        try:
-            res = requests.get(f"{BACKEND_URL}/history/{user}")
-            history = res.json()
+        if history:
+            df = pd.DataFrame(history)
+            st.dataframe(df, use_container_width=True)
 
-            if history:
-                df = pd.DataFrame(history)
-                st.dataframe(df, use_container_width=True)
-
-                if "fraud" in df.columns:
-                    st.subheader("Fraud Trend")
-                    st.line_chart(df["fraud"])
-            else:
-                st.info("No transactions available")
-
-        except:
-            st.error("Unable to load history")
+            if "fraud" in df.columns:
+                st.subheader("Fraud Trend")
+                st.line_chart(df["fraud"])
+        else:
+            st.info("No transactions found")
 
     # ---------------------------------------------
-    # RIGHT – CUSTOMER / ADMIN
+    # ACTIONS
     # ---------------------------------------------
     with right:
 
-        # =============================
         # CUSTOMER
-        # =============================
         if role == "Customer":
             st.subheader("New Transaction")
-
             amount = st.number_input("Amount", min_value=1, step=100)
-            device = st.selectbox("Device", ["mobile_1", "mobile_2", "laptop_1"])
+            device = st.selectbox("Device", ["mobile_1","mobile_2","laptop_1"])
 
-            if st.button("Submit Transaction", key="submit_txn"):
-                payload = {
-                    "user_id": user,
-                    "amount": amount,
-                    "device_id": device
-                }
+            if st.button("Submit"):
+                res = requests.post(
+                    f"{BACKEND_URL}/transaction",
+                    json={
+                        "user_id": user,
+                        "amount": amount,
+                        "device_id": device
+                    }
+                )
+                r = res.json()
 
-                res = requests.post(f"{BACKEND_URL}/transaction", json=payload)
-                resp = res.json()
+                if "action" in r:
+                    st.success(f"Action: {r['action']}")
+                elif r.get("otp_required"):
+                    st.warning("OTP verification required")
+                    st.info(f"OTP: {r['otp']}")
 
-                if "action" in resp:
-                    if resp["action"] == "APPROVE":
-                        st.success("Transaction approved automatically")
-                    elif resp["action"] == "APPROVE_MONITOR":
-                        st.warning("Approved but under monitoring")
-                    elif resp["action"] == "BLOCK":
-                        st.error("Transaction blocked due to high risk")
-
-                elif resp.get("otp_required"):
-                    st.warning("Transaction sent for verification (OTP required)")
-                    st.info(f"OTP sent to user: {resp['otp']}")
-
-                else:
-                    st.error("Transaction failed")
-
-        # =============================
         # ADMIN
-        # =============================
         else:
             st.subheader("Pending Transactions")
+            res = requests.get(f"{BACKEND_URL}/pending")
+            pending = res.json()
 
-            try:
-                res = requests.get(f"{BACKEND_URL}/pending")
-                pending = res.json()
+            if not pending:
+                st.info("No pending transactions")
+            else:
+                df = pd.DataFrame(pending)
+                st.dataframe(df, use_container_width=True)
 
-                if not pending:
-                    st.info("No pending transactions")
+                txn_id = st.selectbox("Transaction ID", df["transaction_id"])
+                txn = df[df["transaction_id"] == txn_id].iloc[0]
+
+                st.write("Risk Score:", txn["risk_score"])
+                st.write("Risk Level:", txn["risk_flag"])
+                st.write("RF Probability:", round(txn["rf_probability"],3))
+                st.write("Online Probability:", round(txn["online_probability"],3))
+
+                if txn["risk_score"] > 50:
+                    otp = st.text_input("Enter OTP")
+
+                    if st.button("Verify OTP"):
+                        v = requests.post(
+                            f"{BACKEND_URL}/verify-otp",
+                            data={
+                                "user_id": txn["user_id"],
+                                "transaction_id": txn_id,
+                                "otp": otp
+                            }
+                        )
+                        st.session_state.otp_ok = v.json().get("verified", False)
+
                 else:
-                    df = pd.DataFrame(pending)
-                    st.dataframe(df, use_container_width=True)
+                    st.session_state.otp_ok = True
 
-                    txn_id = st.selectbox(
-                        "Select Transaction",
-                        df["transaction_id"],
-                        key="txn_select"
+                c1, c2 = st.columns(2)
+                if c1.button("Approve") and st.session_state.otp_ok:
+                    requests.post(
+                        f"{BACKEND_URL}/decision",
+                        data={
+                            "user_id": txn["user_id"],
+                            "transaction_id": txn_id,
+                            "decision": "APPROVE"
+                        }
                     )
+                    st.success("Approved")
+                    st.rerun()
 
-                    txn = df[df["transaction_id"] == txn_id].iloc[0]
+                if c2.button("Reject") and st.session_state.otp_ok:
+                    requests.post(
+                        f"{BACKEND_URL}/decision",
+                        data={
+                            "user_id": txn["user_id"],
+                            "transaction_id": txn_id,
+                            "decision": "REJECT"
+                        }
+                    )
+                    st.warning("Rejected")
+                    st.rerun()
 
-                    st.markdown("### Risk Analysis")
-                    st.write("Risk Score:", txn["risk_score"])
-                    st.write("Risk Level:", txn["risk_flag"])
-                    st.write("RF Probability:", round(txn["rf_probability"], 3))
-                    st.write("Online Probability:", round(txn["online_probability"], 3))
-
-                    # OTP REQUIRED FOR HIGH / CRITICAL
-                    if txn["risk_score"] > 50:
-                        st.subheader("OTP Verification")
-
-                        otp = st.text_input("Enter OTP", key="otp_input")
-
-                        if st.button("Verify OTP", key="verify_otp"):
-                            r = requests.post(
-                                f"{BACKEND_URL}/verify-otp",
-                                data={
-                                    "user_id": txn["user_id"],
-                                    "transaction_id": txn_id,
-                                    "otp": otp
-                                }
-                            )
-                            if r.json().get("verified"):
-                                st.success("OTP verified")
-                                st.session_state.otp_ok = True
-                            else:
-                                st.error("Invalid OTP")
-                                st.session_state.otp_ok = False
-                    else:
-                        st.session_state.otp_ok = True
-
-                    st.divider()
-                    c1, c2 = st.columns(2)
-
-                    if c1.button("Approve", key="approve_btn") and st.session_state.get("otp_ok"):
-                        requests.post(
-                            f"{BACKEND_URL}/decision",
-                            data={
-                                "user_id": txn["user_id"],
-                                "transaction_id": txn_id,
-                                "decision": "APPROVE"
-                            }
-                        )
-                        st.success("Transaction approved")
-                        st.rerun()
-
-                    if c2.button("Reject", key="reject_btn") and st.session_state.get("otp_ok"):
-                        requests.post(
-                            f"{BACKEND_URL}/decision",
-                            data={
-                                "user_id": txn["user_id"],
-                                "transaction_id": txn_id,
-                                "decision": "REJECT"
-                            }
-                        )
-                        st.warning("Transaction rejected")
-                        st.rerun()
-
-            except Exception as e:
-                st.error("Unable to load pending requests")
-
-    st.divider()
-
-    if st.button("Back", key="dashboard_back"):
-        st.session_state.page = "user_select"
+    if st.button("Back"):
+        st.session_state.page = "user"
         st.rerun()
