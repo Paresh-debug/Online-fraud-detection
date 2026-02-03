@@ -1,36 +1,32 @@
 from fastapi import FastAPI, Form
 import json
 import numpy as np
+import random
 from datetime import datetime
-from typing import Dict
 
 from features import extract_features
 from model import rf_model, online_model
 
-app = FastAPI(title="Adaptive Fraud Detection System")
+app = FastAPI(title="Fully Automatic Fraud Detection")
 
 DATA_FILE = "user_transactions.json"
 
-
 # -----------------------------
-# JSON helpers
+# Load / Save
 # -----------------------------
-def load_data() -> Dict:
-    with open(DATA_FILE, "r") as f:
+def load_data():
+    with open(DATA_FILE) as f:
         return json.load(f)
 
-
-def save_data(data: Dict):
+def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=2)
-
 
 data = load_data()
 users = {u["user_id"]: u for u in data["users"]}
 
-
 # -----------------------------
-# Risk bands (20–40–60–80)
+# Risk flag
 # -----------------------------
 def get_risk_flag(score: float) -> str:
     if score <= 20:
@@ -44,17 +40,8 @@ def get_risk_flag(score: float) -> str:
     else:
         return "SEVERE"
 
-
 # -----------------------------
-# Health (Render)
-# -----------------------------
-@app.get("/health")
-def health():
-    return {"status": "ok", "users": len(users)}
-
-
-# -----------------------------
-# Submit transaction (Customer)
+# TRANSACTION (Customer)
 # -----------------------------
 @app.post("/transaction")
 def evaluate_transaction(txn: dict):
@@ -64,38 +51,28 @@ def evaluate_transaction(txn: dict):
     device_id = txn.get("device_id")
 
     if not user_id or amount is None or not device_id:
-        return {"error": "user_id, amount, device_id required"}
-
-    if user_id not in users:
-        return {"error": "Unknown user"}
+        return {"error": "Invalid input"}
 
     user = users[user_id]
     user.setdefault("history", [])
     user.setdefault("pending", {})
     user.setdefault("profile", {"avg_amount": amount})
 
-    last_location = (
-        user["history"][-1]["location"]
-        if user["history"]
-        else "UNKNOWN"
-    )
+    location = user["history"][-1]["location"] if user["history"] else "INDIA"
 
     transaction = {
         "amount": amount,
         "device_id": device_id,
-        "location": last_location,
+        "location": location,
         "timestamp": datetime.utcnow().isoformat()
     }
 
-    # -------------------------
-    # Feature extraction
-    # -------------------------
+    # -----------------------------
+    # Features
+    # -----------------------------
     features = extract_features(transaction, user)
 
-    # -------------------------
-    # Random Forest
-    # -------------------------
-    X_rf = np.array([[
+    X_rf = np.array([[ 
         features["amount"],
         features["txn_velocity"],
         features["device_change"],
@@ -107,52 +84,51 @@ def evaluate_transaction(txn: dict):
 
     rf_prob = float(rf_model.predict_proba(X_rf)[0][1])
 
-    # -------------------------
-    # Online model
-    # -------------------------
     numeric_features = {
         k: v for k, v in features.items()
         if not k.startswith("_")
     }
 
-    proba = online_model.predict_proba_one(numeric_features)
-    online_prob = float(proba.get(1, 0.0))
+    online_prob = float(
+        online_model.predict_proba_one(numeric_features).get(1, 0)
+    )
 
-    # -------------------------
-    # Base ML risk score
-    # -------------------------
+    # -----------------------------
+    # Risk score
+    # -----------------------------
     risk_score = (0.6 * online_prob + 0.4 * rf_prob) * 100
 
-    # -------------------------
-    # RULE-BASED RISK BOOSTS
-    # -------------------------
-    avg_amount = user["profile"].get("avg_amount", amount)
-
-    # Large amount
+    avg_amount = user["profile"]["avg_amount"]
     if amount > avg_amount * 3:
         risk_score += 10
-
-    # Weird amount (not ending with 0)
     if amount % 10 != 0:
         risk_score += 5
-
-    # Sudden city/location change
-    prev_loc = user["history"][-1]["location"] if user["history"] else None
-    if prev_loc and prev_loc != transaction["location"]:
+    if user["history"] and user["history"][-1]["location"] != location:
         risk_score += 10
 
     risk_score = round(min(risk_score, 100), 2)
     risk_flag = get_risk_flag(risk_score)
 
-    txn_id = f"{user_id}_{len(user['history']) + len(user['pending'])}"
+    # -----------------------------
+    # OTP logic (ONLY < 50)
+    # -----------------------------
+    otp = None
+    otp_verified = False
+
+    if risk_score < 50:
+        otp = random.randint(100000, 999999)
+
+    txn_id = f"{user_id}_{len(user['pending'])}"
 
     user["pending"][txn_id] = {
         "transaction": transaction,
         "features": features,
         "risk_score": risk_score,
         "risk_flag": risk_flag,
-        "rf_probability": round(rf_prob, 3),
-        "online_probability": round(online_prob, 3)
+        "rf_probability": rf_prob,
+        "online_probability": online_prob,
+        "otp": otp,
+        "otp_verified": otp_verified
     }
 
     save_data(data)
@@ -160,42 +136,44 @@ def evaluate_transaction(txn: dict):
     return {
         "transaction_id": txn_id,
         "risk_score": risk_score,
-        "risk_flag": risk_flag
+        "risk_flag": risk_flag,
+        "otp_required": otp is not None,
+        "otp": otp
     }
 
+# -----------------------------
+# VERIFY OTP (Admin)
+# -----------------------------
+@app.post("/verify-otp")
+def verify_otp(
+    user_id: str = Form(...),
+    transaction_id: str = Form(...),
+    otp: int = Form(...)
+):
+    txn = users[user_id]["pending"][transaction_id]
+
+    if txn["otp"] != otp:
+        return {"verified": False}
+
+    txn["otp_verified"] = True
+    save_data(data)
+    return {"verified": True}
 
 # -----------------------------
-# Pending (Admin)
-# -----------------------------
-@app.get("/pending")
-def pending_transactions():
-    out = []
-
-    for uid, user in users.items():
-        for tid, txn in user.get("pending", {}).items():
-            out.append({
-                "transaction_id": tid,
-                "user_id": uid,
-                "amount": txn["transaction"]["amount"],
-                "risk_score": txn["risk_score"],
-                "risk_flag": txn["risk_flag"],
-                "rf_probability": txn["rf_probability"],
-                "online_probability": txn["online_probability"]
-            })
-
-    return out
-
-
-# -----------------------------
-# Decision (Admin)
+# DECISION (Admin)
 # -----------------------------
 @app.post("/decision")
-def decision(
+def transaction_decision(
     user_id: str = Form(...),
     transaction_id: str = Form(...),
     decision: str = Form(...)
 ):
     user = users[user_id]
+    txn = user["pending"][transaction_id]
+
+    if txn["otp"] and not txn["otp_verified"]:
+        return {"error": "OTP not verified"}
+
     txn = user["pending"].pop(transaction_id)
 
     label = 0 if decision == "APPROVE" else 1
@@ -211,16 +189,35 @@ def decision(
     user["history"].append(txn["transaction"])
 
     history = user["history"]
-    user["profile"]["avg_amount"] = sum(t["amount"] for t in history) / len(history)
+    user["profile"]["avg_amount"] = sum(h["amount"] for h in history) / len(history)
 
     save_data(data)
-
-    return {"decision": decision}
-
+    return {"saved": True}
 
 # -----------------------------
-# History (User + Admin)
+# PENDING (Admin)
+# -----------------------------
+@app.get("/pending")
+def pending():
+    out = []
+    for uid, u in users.items():
+        for tid, t in u.get("pending", {}).items():
+            out.append({
+                "transaction_id": tid,
+                "user_id": uid,
+                "amount": t["transaction"]["amount"],
+                "risk_score": t["risk_score"],
+                "risk_flag": t["risk_flag"],
+                "rf_probability": t["rf_probability"],
+                "online_probability": t["online_probability"],
+                "otp_required": t["otp"] is not None,
+                "otp_verified": t["otp_verified"]
+            })
+    return out
+
+# -----------------------------
+# HISTORY
 # -----------------------------
 @app.get("/history/{user_id}")
 def history(user_id: str):
-    return users.get(user_id, {}).get("history", [])
+    return users[user_id].get("history", [])

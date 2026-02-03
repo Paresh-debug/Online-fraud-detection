@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 # --------------------------------------------------
-# Custom CSS – Soft Mesh Background (Premium)
+# Custom CSS – Soft Mesh Background
 # --------------------------------------------------
 st.markdown("""
 <style>
@@ -26,21 +26,10 @@ body {
         #f8fafc;
 }
 
-.block-container {
-    padding-top: 2rem;
-}
-
-h1, h2, h3 {
-    color: #1e293b;
-}
-
-.subtitle {
-    color: #475569;
-    font-size: 0.95rem;
-}
+.block-container { padding-top: 2rem; }
 
 .card {
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(255,255,255,0.95);
     padding: 1.4rem;
     border-radius: 16px;
     box-shadow: 0 12px 28px rgba(0,0,0,0.08);
@@ -54,6 +43,13 @@ h1, h2, h3 {
     color: #0f172a;
 }
 
+.subtitle { color: #475569; }
+
+.risk-low { color: #16a34a; font-weight: 600; }
+.risk-medium { color: #ca8a04; font-weight: 600; }
+.risk-high { color: #ea580c; font-weight: 600; }
+.risk-severe { color: #dc2626; font-weight: 700; }
+
 .stButton>button {
     border-radius: 10px;
     padding: 0.6rem;
@@ -62,27 +58,17 @@ h1, h2, h3 {
     color: white;
     border: none;
 }
-
-.stButton>button:hover {
-    opacity: 0.92;
-}
-
-.risk-low { color: #16a34a; font-weight: 600; }
-.risk-medium { color: #ca8a04; font-weight: 600; }
-.risk-high { color: #ea580c; font-weight: 600; }
-.risk-severe { color: #dc2626; font-weight: 700; }
 </style>
 """, unsafe_allow_html=True)
 
 # --------------------------------------------------
-# Load users from JSON
+# Load users
 # --------------------------------------------------
 @st.cache_data
 def load_users():
     with open("user_transactions.json") as f:
         data = json.load(f)
     return sorted(u["user_id"] for u in data["users"])
-
 
 users = load_users()
 
@@ -102,11 +88,10 @@ if "user" not in st.session_state:
 if st.session_state.page == "role":
     st.markdown("<h1 style='text-align:center'>XYZ Bank</h1>", unsafe_allow_html=True)
     st.markdown(
-        "<p class='subtitle' style='text-align:center'>Adaptive Online Fraud Detection Platform</p>",
+        "<p class='subtitle' style='text-align:center'>Adaptive Fraud Detection Platform</p>",
         unsafe_allow_html=True
     )
 
-    st.write("")
     role = st.radio("Select Role", ["Customer", "Admin"], horizontal=True)
 
     if st.button("Continue"):
@@ -169,7 +154,7 @@ elif st.session_state.page == "dashboard":
                 st.markdown("<div class='section-title'>Fraud Decisions</div>", unsafe_allow_html=True)
                 st.line_chart(df["fraud"])
         else:
-            st.info("No transaction history available")
+            st.info("No transaction history")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -179,9 +164,9 @@ elif st.session_state.page == "dashboard":
     with right:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
 
-        # ---------------------------
-        # CUSTOMER
-        # ---------------------------
+        # ======================
+        # CUSTOMER VIEW
+        # ======================
         if role == "Customer":
             st.markdown("<div class='section-title'>New Transaction</div>", unsafe_allow_html=True)
 
@@ -189,7 +174,7 @@ elif st.session_state.page == "dashboard":
             device = st.selectbox("Device", ["mobile_1", "mobile_2", "laptop_1"])
 
             if st.button("Submit Transaction"):
-                requests.post(
+                r = requests.post(
                     f"{BACKEND_URL}/transaction",
                     json={
                         "user_id": user,
@@ -197,11 +182,19 @@ elif st.session_state.page == "dashboard":
                         "device_id": device
                     }
                 )
-                st.success("Transaction submitted for evaluation")
+                resp = r.json()
 
-        # ---------------------------
-        # ADMIN
-        # ---------------------------
+                st.success("Transaction submitted")
+
+                if resp.get("otp_required"):
+                    st.info(
+                        f"OTP for this transaction: {resp['otp']} "
+                        "(share this OTP with the admin)"
+                    )
+
+        # ======================
+        # ADMIN VIEW
+        # ======================
         else:
             st.markdown("<div class='section-title'>Pending Transactions</div>", unsafe_allow_html=True)
 
@@ -230,22 +223,57 @@ elif st.session_state.page == "dashboard":
                 <p><strong>Online Probability:</strong> {txn["online_probability"]}</p>
                 """, unsafe_allow_html=True)
 
-                with st.form("decision_form"):
-                    col1, col2 = st.columns(2)
-                    approve = col1.form_submit_button("Approve")
-                    reject = col2.form_submit_button("Reject")
+                # ---------- OTP ----------
+                otp_verified = txn["otp_verified"]
+                otp_required = txn["otp_required"]
 
-                    if approve or reject:
-                        requests.post(
-                            f"{BACKEND_URL}/decision",
+                if otp_required and not otp_verified:
+                    otp_input = st.text_input("Enter OTP provided by user", type="password")
+
+                    if st.button("Verify OTP"):
+                        vr = requests.post(
+                            f"{BACKEND_URL}/verify-otp",
                             data={
                                 "user_id": txn["user_id"],
                                 "transaction_id": txn_id,
-                                "decision": "APPROVE" if approve else "REJECT"
+                                "otp": otp_input
                             }
                         )
-                        st.success("Decision recorded")
-                        st.rerun()
+                        if vr.json().get("verified"):
+                            st.success("OTP verified")
+                            st.rerun()
+                        else:
+                            st.error("Invalid OTP")
+
+                st.divider()
+
+                approve_disabled = otp_required and not otp_verified
+
+                col1, col2 = st.columns(2)
+                if col1.button("Approve", disabled=approve_disabled):
+                    requests.post(
+                        f"{BACKEND_URL}/decision",
+                        data={
+                            "user_id": txn["user_id"],
+                            "transaction_id": txn_id,
+                            "decision": "APPROVE"
+                        }
+                    )
+                    st.success("Transaction approved")
+                    st.rerun()
+
+                if col2.button("Reject"):
+                    requests.post(
+                        f"{BACKEND_URL}/decision",
+                        data={
+                            "user_id": txn["user_id"],
+                            "transaction_id": txn_id,
+                            "decision": "REJECT"
+                        }
+                    )
+                    st.warning("Transaction rejected")
+                    st.rerun()
+
             else:
                 st.info("No pending transactions")
 
