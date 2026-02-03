@@ -209,36 +209,36 @@ elif st.session_state.page == "dashboard":
                     st.session_state.otp_ok = True
 
                 st.divider()
-                col1, col2 = st.columns(2)
+        col1, col2 = st.columns(2)
+# Approve → OTP REQUIRED
+        if col1.button("Approve Transaction"):
+            if not st.session_state.otp_ok:
+                st.error("OTP verification required before approval")
+            else:
+                requests.post(
+                    f"{BACKEND_URL}/decision",
+                    data={
+                        "user_id": txn["user_id"],
+                        "transaction_id": txn_id,
+                        "decision": "APPROVE"
+                    }
+                )
+                st.success("Transaction approved")
+                st.rerun()
 
-                # Approve → OTP REQUIRED
-if col1.button("Approve Transaction"):
-    if not st.session_state.otp_ok:
-        st.error("OTP verification required before approval")
-    else:
-        requests.post(
-            f"{BACKEND_URL}/decision",
-            data={
-                "user_id": txn["user_id"],
-                "transaction_id": txn_id,
-                "decision": "APPROVE"
-            }
-        )
-        st.success("Transaction approved")
-        st.rerun()
+        # Reject → OTP NOT REQUIRED
+        if col2.button("Reject Transaction"):
+            requests.post(
+                f"{BACKEND_URL}/decision",
+                data={
+                    "user_id": txn["user_id"],
+                    "transaction_id": txn_id,
+                    "decision": "REJECT"
+                }
+            )
+            st.warning("Transaction rejected and marked as fraud")
+            st.rerun()
 
-# Reject → OTP NOT REQUIRED
-if col2.button("Reject Transaction"):
-    requests.post(
-        f"{BACKEND_URL}/decision",
-        data={
-            "user_id": txn["user_id"],
-            "transaction_id": txn_id,
-            "decision": "REJECT"
-        }
-    )
-    st.warning("Transaction rejected and marked as fraud")
-    st.rerun()
 
     st.divider()
     if st.button("Back"):
