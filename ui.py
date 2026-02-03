@@ -211,29 +211,34 @@ elif st.session_state.page == "dashboard":
                 st.divider()
                 col1, col2 = st.columns(2)
 
-                if col1.button("Approve Transaction") and st.session_state.otp_ok:
-                    requests.post(
-                        f"{BACKEND_URL}/decision",
-                        data={
-                            "user_id": txn["user_id"],
-                            "transaction_id": txn_id,
-                            "decision": "APPROVE"
-                        }
-                    )
-                    st.success("Transaction approved")
-                    st.rerun()
+                # Approve → OTP REQUIRED
+if col1.button("Approve Transaction"):
+    if not st.session_state.otp_ok:
+        st.error("OTP verification required before approval")
+    else:
+        requests.post(
+            f"{BACKEND_URL}/decision",
+            data={
+                "user_id": txn["user_id"],
+                "transaction_id": txn_id,
+                "decision": "APPROVE"
+            }
+        )
+        st.success("Transaction approved")
+        st.rerun()
 
-                if col2.button("Reject Transaction") and st.session_state.otp_ok:
-                    requests.post(
-                        f"{BACKEND_URL}/decision",
-                        data={
-                            "user_id": txn["user_id"],
-                            "transaction_id": txn_id,
-                            "decision": "REJECT"
-                        }
-                    )
-                    st.warning("Transaction rejected")
-                    st.rerun()
+# Reject → OTP NOT REQUIRED
+if col2.button("Reject Transaction"):
+    requests.post(
+        f"{BACKEND_URL}/decision",
+        data={
+            "user_id": txn["user_id"],
+            "transaction_id": txn_id,
+            "decision": "REJECT"
+        }
+    )
+    st.warning("Transaction rejected and marked as fraud")
+    st.rerun()
 
     st.divider()
     if st.button("Back"):

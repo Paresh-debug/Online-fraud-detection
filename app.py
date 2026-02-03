@@ -194,33 +194,35 @@ def decision(
 
     otp_verified = txn.get("otp_verified", False)
 
-    # -------------------------------------------------
-    # FRAUD LABEL LOGIC (STRICT)
-    # -------------------------------------------------
+    # -----------------------------------------
+    # STRICT POLICY
+    # -----------------------------------------
     if decision == "APPROVE":
         if not otp_verified:
-            # Approval without OTP is NOT allowed
             return {
                 "error": "OTP verification required before approval"
             }
         fraud_label = 0
 
-    else:  # REJECT
-        # ❗ Rejecting without OTP = FRAUD
+    elif decision == "REJECT":
+        # ❗ ALWAYS fraud, OTP or not
         fraud_label = 1
 
-    # -------------------------------------------------
-    # Online model learns ONLY when OTP verified
-    # -------------------------------------------------
+    else:
+        return {"error": "Invalid decision"}
+
+    # -----------------------------------------
+    # Online learning (only trusted labels)
+    # -----------------------------------------
     if otp_verified:
         online_model.learn_one(
             {k: v for k, v in txn["features"].items() if not k.startswith("_")},
             fraud_label
         )
 
-    # -------------------------------------------------
+    # -----------------------------------------
     # Save transaction
-    # -------------------------------------------------
+    # -----------------------------------------
     txn["transaction"]["fraud"] = fraud_label
     txn["transaction"]["decision"] = decision
     txn["transaction"]["otp_verified"] = otp_verified
