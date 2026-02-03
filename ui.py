@@ -10,22 +10,21 @@ st.set_page_config(
     layout="wide"
 )
 
-# -----------------------------
-# Load Users from JSON  ✅ NEW
-# -----------------------------
+# -------------------------------------------------
+# Load users from JSON
+# -------------------------------------------------
 @st.cache_data
 def load_users():
     with open("user_transactions.json", "r") as f:
         data = json.load(f)
-
     return sorted(user["user_id"] for user in data["users"])
 
 
 users = load_users()
 
-# -----------------------------
+# -------------------------------------------------
 # Session State
-# -----------------------------
+# -------------------------------------------------
 if "page" not in st.session_state:
     st.session_state.page = "role"
 
@@ -35,12 +34,13 @@ if "role" not in st.session_state:
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# ======================================================
+
+# =================================================
 # PAGE 0 – ROLE SELECTION
-# ======================================================
+# =================================================
 if st.session_state.page == "role":
     st.title("XYZ Bank")
-    st.markdown("#### Access Role")
+    st.markdown("### Access Role")
 
     role = st.radio("Select role", ["Customer", "Admin"])
 
@@ -49,9 +49,10 @@ if st.session_state.page == "role":
         st.session_state.page = "user_select"
         st.rerun()
 
-# ======================================================
+
+# =================================================
 # PAGE 1 – USER SELECTION
-# ======================================================
+# =================================================
 elif st.session_state.page == "user_select":
     st.title("Account Selection")
 
@@ -68,9 +69,10 @@ elif st.session_state.page == "user_select":
         st.session_state.page = "role"
         st.rerun()
 
-# ======================================================
+
+# =================================================
 # PAGE 2 – DASHBOARD
-# ======================================================
+# =================================================
 elif st.session_state.page == "dashboard":
     user = st.session_state.user
     role = st.session_state.role
@@ -81,9 +83,9 @@ elif st.session_state.page == "dashboard":
     st.divider()
     left, right = st.columns([2.5, 1.5])
 
-    # -----------------------------
+    # -------------------------------------------------
     # LEFT – TRANSACTION HISTORY
-    # -----------------------------
+    # -------------------------------------------------
     with left:
         st.subheader("Transaction History")
 
@@ -95,14 +97,15 @@ elif st.session_state.page == "dashboard":
                 df = pd.DataFrame(history)
                 st.dataframe(df, use_container_width=True)
             else:
-                st.info("No transactions available")
+                st.info("No transaction history")
 
-        except:
+        except Exception as e:
             st.error("Unable to load history")
+            st.code(str(e))
 
-    # -----------------------------
+    # -------------------------------------------------
     # RIGHT – CUSTOMER / ADMIN PANEL
-    # -----------------------------
+    # -------------------------------------------------
     with right:
 
         # =============================
@@ -112,7 +115,10 @@ elif st.session_state.page == "dashboard":
             st.subheader("New Transaction")
 
             amount = st.number_input("Amount", min_value=1, step=100)
-            device = st.selectbox("Device", ["mobile_1", "mobile_2", "laptop_1"])
+            device = st.selectbox(
+                "Device",
+                ["mobile_1", "mobile_2", "laptop_1"]
+            )
 
             if st.button("Submit Transaction", key="submit_txn"):
                 payload = {
@@ -121,7 +127,10 @@ elif st.session_state.page == "dashboard":
                     "device_id": device
                 }
 
-                res = requests.post(f"{BACKEND_URL}/transaction", json=payload)
+                res = requests.post(
+                    f"{BACKEND_URL}/transaction",
+                    json=payload
+                )
 
                 if res.status_code == 200:
                     st.success("Transaction submitted for evaluation")
@@ -150,14 +159,14 @@ elif st.session_state.page == "dashboard":
 
                     txn = df[df["transaction_id"] == selected_txn].iloc[0]
 
-                    st.markdown("**Transaction Details**")
+                    st.markdown("#### Transaction Details")
                     st.write("User:", txn["user_id"])
                     st.write("Amount:", txn["amount"])
                     st.write("Risk Flag:", txn["risk_flag"])
+                    st.write("Risk Score:", txn["risk_score"])
 
-                    # 🔥 MODEL PROBABILITIES (NEW)
                     st.divider()
-                    st.markdown("**Model Risk Scores**")
+                    st.markdown("#### Model Probabilities")
 
                     st.metric(
                         "Random Forest Probability",
@@ -169,36 +178,42 @@ elif st.session_state.page == "dashboard":
                         f"{txn['online_probability']:.2f}"
                     )
 
-                    col1, col2 = st.columns(2)
+                    # -----------------------------------------
+                    # SINGLE-CLICK APPROVE / REJECT (FORM FIX)
+                    # -----------------------------------------
+                    with st.form(
+                        key=f"decision_form_{txn['transaction_id']}"
+                    ):
+                        col1, col2 = st.columns(2)
 
-                    if col1.button("Approve", key=f"approve_{txn['transaction_id']}"):
-                        requests.post(
-                            f"{BACKEND_URL}/decision",
-                            data={
-                                "user_id": txn["user_id"],
-                                "transaction_id": txn["transaction_id"],
-                                "decision": "APPROVE"
-                            }
-                        )
-                        st.success("Transaction approved")
-                        st.rerun()
+                        approve = col1.form_submit_button("Approve")
+                        reject = col2.form_submit_button("Reject")
 
-                    if col2.button("Reject", key=f"reject_{txn['transaction_id']}"):
-                        requests.post(
-                            f"{BACKEND_URL}/decision",
-                            data={
-                                "user_id": txn["user_id"],
-                                "transaction_id": txn["transaction_id"],
-                                "decision": "REJECT"
-                            }
-                        )
-                        st.warning("Transaction rejected")
-                        st.rerun()
+                        if approve or reject:
+                            decision = (
+                                "APPROVE" if approve else "REJECT"
+                            )
+
+                            requests.post(
+                                f"{BACKEND_URL}/decision",
+                                data={
+                                    "user_id": txn["user_id"],
+                                    "transaction_id": txn["transaction_id"],
+                                    "decision": decision
+                                }
+                            )
+
+                            st.success(
+                                f"Transaction {decision.lower()}d"
+                            )
+                            st.rerun()
+
                 else:
                     st.info("No pending transactions")
 
-            except:
+            except Exception as e:
                 st.error("Unable to load pending requests")
+                st.code(str(e))
 
     st.divider()
 
