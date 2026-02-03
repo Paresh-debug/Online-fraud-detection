@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import requests
@@ -7,81 +6,63 @@ import requests
 BACKEND_URL = "https://online-fraud-detection-jl8h.onrender.com"
 
 st.set_page_config(
-    page_title="XYZ Bank | Adaptive Fraud Guard",
+    page_title="XYZ Bank - Fraud Detection",
     layout="wide"
 )
 
-# --- CUSTOM CSS FOR UI REFINEMENT ---
+# --- CUSTOM CSS ---
 st.markdown("""
     <style>
-    .main { background-color: #f8f9fa; }
-    .stButton>button { width: 100%; border-radius: 8px; font-weight: 600; height: 3em; }
+    .stButton>button { width: 100%; border-radius: 4px; height: 3em; }
     .status-card {
-        padding: 18px;
-        border-radius: 12px;
+        padding: 20px;
+        border-radius: 8px;
         background-color: white;
-        border: 1px solid #e6e6e6;
-        box-shadow: 2px 2px 8px rgba(0,0,0,0.04);
+        border: 1px solid #e0e0e0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
     }
-    .section-title {
-        font-size: 1.05rem;
-        font-weight: 700;
-        margin: 0 0 0.25rem 0;
-    }
-    .muted {
-        color: rgba(0,0,0,0.6);
-        font-size: 0.9rem;
+    .metric-container {
+        border-left: 4px solid #0068c9;
+        padding-left: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SESSION STATE INITIALIZATION ---
-if "page" not in st.session_state:
-    st.session_state.page = "role"
-if "role" not in st.session_state:
-    st.session_state.role = None
-if "user" not in st.session_state:
-    st.session_state.user = None
-if "account_type" not in st.session_state:
-    st.session_state.account_type = None
-if "otp_ok" not in st.session_state:
-    st.session_state.otp_ok = False
+# --- SESSION STATE ---
+if "page" not in st.session_state: st.session_state.page = "role"
+if "role" not in st.session_state: st.session_state.role = None
+if "user" not in st.session_state: st.session_state.user = None
+if "account_type" not in st.session_state: st.session_state.account_type = None
+if "otp_ok" not in st.session_state: st.session_state.otp_ok = False
 
 # --- HELPERS ---
 @st.cache_data
-def get_users():
+def get_users_list():
     try:
         r = requests.get(f"{BACKEND_URL}/debug/users")
         return r.json() if r.status_code == 200 else []
-    except Exception:
+    except:
         return []
-
-def safe_json(resp):
-    try:
-        return resp.json()
-    except Exception:
-        return {}
 
 # --- PAGE 0: ROLE SELECTION ---
 if st.session_state.page == "role":
     st.markdown("<br><br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
-
+    
     with col2:
         st.markdown("""
-            <div style="
-                background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-                padding: 40px; border-radius: 18px; text-align: center; color: white; margin-bottom: 20px;">
-                <h1 style="margin:0;">XYZ Bank</h1>
-                <p style="opacity:0.85; margin: 8px 0 0 0;">Adaptive Fraud Detection System</p>
+            <div style="background-color: #0e1117; padding: 40px; border-radius: 8px; text-align: center; border: 1px solid #30333d;">
+                <h1 style='margin:0; color: white;'>XYZ Bank</h1>
+                <p style='color: #a0a0a0;'>Adaptive Fraud Detection System</p>
             </div>
-        """, unsafe_allow_html=True)
-
-        st.write("Select access level")
-        role = st.radio("", ["Customer", "Admin"], horizontal=True, label_visibility="collapsed")
-
+            """, unsafe_allow_html=True)
+        
+        st.write("### Select Access Level")
+        role = st.radio("Role", ["Customer", "Admin"], label_visibility="collapsed")
+        
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("Continue"):
+        if st.button("Enter System"):
             st.session_state.role = role
             st.session_state.page = "user_select"
             st.rerun()
@@ -89,27 +70,28 @@ if st.session_state.page == "role":
 # --- PAGE 1: USER SELECTION ---
 elif st.session_state.page == "user_select":
     st.title("Account Selection")
-    st.caption("Select an account to continue")
-
-    users = get_users()
-    user_map = {f"{u['user_id']} ({u['account_type']})": u for u in users}
-
-    choice = st.selectbox("User", ["-- Select Account --"] + list(user_map.keys()))
-
+    st.write("Select a user profile to proceed.")
     st.divider()
-    c1, c2, _ = st.columns([1, 1, 2])
 
+    users = get_users_list()
+    user_map = {f"{u['user_id']} | {u['account_type'].upper()}": u for u in users}
+    
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        choice = st.selectbox("Available Accounts", ["-- Select --"] + list(user_map.keys()))
+    
+    st.write("")
+    c1, c2, _ = st.columns([1, 1, 2])
     with c1:
         if st.button("Proceed"):
-            if choice != "-- Select Account --":
+            if choice != "-- Select --":
                 selected = user_map[choice]
                 st.session_state.user = selected["user_id"]
                 st.session_state.account_type = selected["account_type"]
                 st.session_state.page = "dashboard"
                 st.rerun()
             else:
-                st.warning("Please select an account")
-
+                st.warning("Please select a valid account.")
     with c2:
         if st.button("Back"):
             st.session_state.page = "role"
@@ -117,197 +99,192 @@ elif st.session_state.page == "user_select":
 
 # --- PAGE 2: DASHBOARD ---
 elif st.session_state.page == "dashboard":
-    # Sidebar
+    
+    # Sidebar Info
     with st.sidebar:
-        st.title("Bank Portal")
-        st.info(
-            f"User: {st.session_state.user}\n\n"
-            f"Account Type: {str(st.session_state.account_type).upper()}"
-        )
+        st.header("Session Info")
+        st.text(f"Role: {st.session_state.role}")
+        
+        # Only show logged-in user info if NOT admin (Admins view everyone)
+        if st.session_state.role == "Customer":
+            st.text(f"User: {st.session_state.user}")
+            st.text(f"Type: {st.session_state.account_type.upper()}")
+            
+        st.divider()
         if st.button("Logout"):
             st.session_state.page = "role"
             st.rerun()
+        if st.button("Change Account"):
+            st.session_state.page = "user_select"
+            st.rerun()
 
     st.title(f"{st.session_state.role} Dashboard")
-    st.divider()
 
-    left, right = st.columns([2, 1.2], gap="large")
-
-    # LEFT: TRANSACTION HISTORY
-    with left:
-        st.subheader("Transaction History")
-        r = requests.get(f"{BACKEND_URL}/history/{st.session_state.user}")
-        history = safe_json(r)
-
-        if history:
-            df = pd.DataFrame(history)
-
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Total Transactions", len(df))
-            m2.metric("Total Spent", f"{df['amount'].sum():,.2f}" if "amount" in df.columns else "0")
-            if "fraud" in df.columns:
-                m3.metric("Fraud Alerts", int((df["fraud"] == 1).sum()))
-            else:
-                m3.metric("Fraud Alerts", 0)
-
-            st.dataframe(df, use_container_width=True, hide_index=True)
-
-            if "fraud" in df.columns:
-                with st.expander("Fraud Trend"):
+    # --- CUSTOMER VIEW ---
+    if st.session_state.role == "Customer":
+        left, right = st.columns([2, 1], gap="large")
+        
+        # LEFT: HISTORY
+        with left:
+            st.subheader("Transaction History")
+            r = requests.get(f"{BACKEND_URL}/history/{st.session_state.user}")
+            history = r.json()
+            
+            if history:
+                df = pd.DataFrame(history)
+                m1, m2 = st.columns(2)
+                m1.metric("Total Transactions", len(df))
+                m2.metric("Total Volume", f"{df['amount'].sum():,.2f}")
+                
+                st.dataframe(df, use_container_width=True, hide_index=True)
+                
+                if "fraud" in df.columns:
+                    st.caption("Fraud Probability Trend")
                     st.line_chart(df["fraud"])
-        else:
-            st.info("No transaction history found for this account")
+            else:
+                st.info("No transaction history available.")
 
-    # RIGHT: ROLE-SPECIFIC ACTIONS
-    with right:
-        # CUSTOMER VIEW
-        if st.session_state.role == "Customer":
-            st.markdown('<div class="status-card">', unsafe_allow_html=True)
-            st.markdown('<div class="section-title">New Transaction</div>', unsafe_allow_html=True)
-            st.markdown('<div class="muted">Submit a transaction for risk evaluation</div>', unsafe_allow_html=True)
-            st.write("")
-
+        # RIGHT: NEW TRANSACTION
+        with right:
+            st.subheader("New Transaction")
             with st.form("txn_form"):
                 amount = st.number_input("Amount", min_value=1, step=100)
-                device = st.selectbox("Device", ["mobile_1", "mobile_2", "laptop_1", "laptop_9"])
-                submitted = st.form_submit_button("Submit Transaction")
-
-                if submitted:
-                    r = requests.post(
-                        f"{BACKEND_URL}/transaction",
-                        json={
-                            "user_id": st.session_state.user,
-                            "amount": amount,
-                            "device_id": device
-                        }
-                    )
-                    resp = safe_json(r)
-
+                device = st.selectbox("Device ID", ["mobile_1", "mobile_2", "laptop_1", "desktop_1"])
+                submit = st.form_submit_button("Submit Transaction")
+                
+                if submit:
+                    r = requests.post(f"{BACKEND_URL}/transaction", 
+                                      json={"user_id": st.session_state.user, 
+                                            "amount": amount, 
+                                            "device_id": device})
+                    resp = r.json()
+                    
                     if resp.get("action") == "BLOCK":
-                        st.error(resp.get("message", "Transaction blocked"))
+                        st.error(f"Transaction Blocked: {resp.get('message')}")
                     elif resp.get("otp_required"):
-                        st.warning("Transaction sent for verification")
-                        st.info(f"OTP sent to user: {resp.get('otp')}")
+                        st.warning("Verification Required")
+                        st.info(f"OTP Sent: {resp['otp']}")
                     elif resp.get("action"):
-                        st.success(f"Result: {resp['action']}")
-                    else:
-                        st.info("Unexpected response from server")
+                        st.success(f"Status: {resp['action']}")
 
-            st.markdown("</div>", unsafe_allow_html=True)
+    # --- ADMIN VIEW ---
+    elif st.session_state.role == "Admin":
+        
+        # Define Tabs
+        tab_monitor, tab_approvals = st.tabs(["User Monitoring", "Pending Approvals"])
 
-        # ADMIN VIEW
-        elif st.session_state.role == "Admin":
-            st.markdown('<div class="status-card">', unsafe_allow_html=True)
-            st.markdown('<div class="section-title">Admin Actions</div>', unsafe_allow_html=True)
-            st.markdown('<div class="muted">Review and approve or reject high-risk transactions</div>', unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-            st.write("")
+        # TAB 1: User Monitoring (FIXED: Added Dropdown)
+        with tab_monitor:
+            col_sel, _ = st.columns([1, 2])
+            
+            # Fetch all users to populate the admin dropdown
+            all_users_data = get_users_list()
+            all_user_ids = [u['user_id'] for u in all_users_data]
+            
+            # Determine default index based on previous selection if possible
+            try:
+                curr_idx = all_user_ids.index(st.session_state.user)
+            except (ValueError, TypeError):
+                curr_idx = 0
+            
+            with col_sel:
+                monitor_user = st.selectbox("Select User to Monitor", all_user_ids, index=curr_idx)
 
-            # Separate section: Pending Approvals (full width below history/actions)
-            st.info("Pending approvals are shown in a separate section below.")
+            st.divider()
+            st.subheader(f"History for {monitor_user}")
+            
+            # Fetch history for the dynamically selected user, NOT the session user
+            r = requests.get(f"{BACKEND_URL}/history/{monitor_user}")
+            history = r.json()
+            
+            if history:
+                df_h = pd.DataFrame(history)
+                st.dataframe(df_h, use_container_width=True)
+                if "fraud" in df_h.columns:
+                    st.line_chart(df_h["fraud"])
+            else:
+                st.info(f"No history found for {monitor_user}.")
 
-    # SEPARATE SECTION: PENDING APPROVALS (ADMIN ONLY)
-    if st.session_state.role == "Admin":
-        st.divider()
-        st.subheader("Pending Approvals")
-
-        # Two-column section: left list, right review panel
-        p_left, p_right = st.columns([1.35, 1], gap="large")
-
-        r = requests.get(f"{BACKEND_URL}/pending")
-        pending = safe_json(r)
-
-        if not pending:
-            st.success("No pending transactions")
-        else:
-            dfp = pd.DataFrame(pending)
-
-            with p_left:
-                st.markdown('<div class="status-card">', unsafe_allow_html=True)
-                st.markdown('<div class="section-title">Queue</div>', unsafe_allow_html=True)
-                st.markdown('<div class="muted">Select a transaction to review</div>', unsafe_allow_html=True)
-                st.write("")
-                st.dataframe(
-                    dfp[["transaction_id", "user_id", "risk_score", "risk_flag", "otp_verified"]],
-                    use_container_width=True,
-                    hide_index=True
-                )
-                st.write("")
-                txn_id = st.selectbox("Transaction", dfp["transaction_id"].tolist())
-                st.markdown("</div>", unsafe_allow_html=True)
-
-            txn = dfp[dfp["transaction_id"] == txn_id].iloc[0]
-
-            with p_right:
-                st.markdown('<div class="status-card">', unsafe_allow_html=True)
-                st.markdown('<div class="section-title">Review</div>', unsafe_allow_html=True)
-                st.caption(f"Transaction ID: {txn_id}")
-
-                st.metric("Risk Score", float(txn["risk_score"]))
-                st.write("Risk Level:", txn["risk_flag"])
-                st.write("RF Probability:", round(float(txn["rf_probability"]), 3))
-                st.write("Online Probability:", round(float(txn["online_probability"]), 3))
-                st.write("OTP Verified:", bool(txn["otp_verified"]))
+        # TAB 2: Pending Approvals
+        with tab_approvals:
+            st.subheader("Pending Transaction Queue")
+            
+            r = requests.get(f"{BACKEND_URL}/pending")
+            pending = r.json()
+            
+            if not pending:
+                st.success("No pending transactions requiring review.")
+            else:
+                df_p = pd.DataFrame(pending)
+                st.dataframe(df_p[['transaction_id', 'user_id', 'risk_score', 'risk_flag']], use_container_width=True)
+                
                 st.divider()
+                
+                # Decision Interface
+                col_select, col_details = st.columns([1, 2])
+                
+                with col_select:
+                    st.markdown("##### Select Transaction")
+                    txn_id = st.selectbox("Transaction ID", df_p["transaction_id"])
+                
+                if txn_id:
+                    txn = df_p[df_p["transaction_id"] == txn_id].iloc[0]
+                    
+                    with col_details:
+                        st.markdown(f"##### Reviewing: {txn_id} (User: {txn['user_id']})")
+                        
+                        m1, m2, m3 = st.columns(3)
+                        m1.metric("Risk Score", txn['risk_score'])
+                        m2.metric("RF Probability", round(txn['rf_probability'], 3))
+                        m3.metric("Online Probability", round(txn['online_probability'], 3))
+                        
+                        st.text(f"Risk Level: {txn['risk_flag']}")
 
-                # OTP SECTION (only when required per original logic: score > 50)
-                if float(txn["risk_score"]) > 50:
-                    st.markdown('<div class="section-title">OTP Verification</div>', unsafe_allow_html=True)
-                    otp = st.text_input("Enter OTP", key="otp_input")
-
-                    if st.button("Verify OTP"):
-                        v = requests.post(
-                            f"{BACKEND_URL}/verify-otp",
-                            data={
-                                "user_id": txn["user_id"],
-                                "transaction_id": txn_id,
-                                "otp": otp
-                            }
-                        )
-                        if safe_json(v).get("verified"):
-                            st.session_state.otp_ok = True
-                            st.success("OTP verified successfully")
+                        # OTP Logic
+                        if txn['risk_score'] > 50:
+                            st.markdown("---")
+                            st.warning("High Risk - OTP Verification Required")
+                            
+                            c_otp1, c_otp2 = st.columns([2, 1])
+                            with c_otp1:
+                                otp_input = st.text_input("Enter OTP provided by customer")
+                            with c_otp2:
+                                st.write("")
+                                st.write("") 
+                                if st.button("Verify OTP"):
+                                    v = requests.post(f"{BACKEND_URL}/verify-otp", 
+                                                      data={"user_id": txn["user_id"], 
+                                                            "transaction_id": txn_id, 
+                                                            "otp": otp_input})
+                                    if v.json().get("verified"):
+                                        st.session_state.otp_ok = True
+                                        st.success("OTP Verified")
+                                    else:
+                                        st.session_state.otp_ok = False
+                                        st.error("Invalid OTP")
                         else:
-                            st.session_state.otp_ok = False
-                            st.error("Invalid OTP")
-                else:
-                    st.session_state.otp_ok = True
+                            st.session_state.otp_ok = True
 
-                st.divider()
-                col1, col2 = st.columns(2)
-
-                # APPROVE -> OTP REQUIRED
-                if col1.button("Approve Transaction"):
-                    if not st.session_state.otp_ok:
-                        st.error("OTP verification required before approval")
-                    else:
-                        requests.post(
-                            f"{BACKEND_URL}/decision",
-                            data={
-                                "user_id": txn["user_id"],
-                                "transaction_id": txn_id,
-                                "decision": "APPROVE"
-                            }
-                        )
-                        st.success("Transaction approved")
-                        st.rerun()
-
-                # REJECT -> OTP NOT REQUIRED
-                if col2.button("Reject Transaction"):
-                    requests.post(
-                        f"{BACKEND_URL}/decision",
-                        data={
-                            "user_id": txn["user_id"],
-                            "transaction_id": txn_id,
-                            "decision": "REJECT"
-                        }
-                    )
-                    st.warning("Transaction rejected and marked as fraud")
-                    st.rerun()
-
-                st.markdown("</div>", unsafe_allow_html=True)
-
-    st.divider()
-    if st.button("Back"):
-        st.session_state.page = "user_select"
-        st.rerun()
+                        st.markdown("---")
+                        
+                        btn_col1, btn_col2 = st.columns(2)
+                        with btn_col1:
+                            if st.button("Approve Transaction", type="primary"):
+                                if not st.session_state.otp_ok:
+                                    st.error("Cannot approve: OTP verification required.")
+                                else:
+                                    requests.post(f"{BACKEND_URL}/decision", 
+                                                  data={"user_id": txn["user_id"], 
+                                                        "transaction_id": txn_id, 
+                                                        "decision": "APPROVE"})
+                                    st.success("Transaction Approved")
+                                    st.rerun()
+                        
+                        with btn_col2:
+                            if st.button("Reject (Mark as Fraud)"):
+                                requests.post(f"{BACKEND_URL}/decision", 
+                                              data={"user_id": txn["user_id"], 
+                                                    "transaction_id": txn_id, 
+                                                    "decision": "REJECT"})
+                                st.warning("Transaction Rejected")
+                                st.rerun()
